@@ -1,0 +1,333 @@
+      subroutine sigmalogfinden
+      implicit none
+      integer mnp,liw,n,lw,ldy,lwork,liwork
+      parameter (n=2,mnp=100000,ldy=n,liw=mnp*(2*n+1)+n*n+4*n+2,
+     & lw=mnp*(3*n*n+6*n+2)+4*n*n+4*n,lwork=mnp*(3*n*n+6*n+2)+4*n*n+3*n,
+     & liwork=mnp*(2*n+1)+n)
+      integer np,iw(liw),ifail,i,
+     & m1,lck,lcklog,lwrk,lwrklog,numbeg,nummix,
+     & init,ijac,iwork(liwork),j
+      parameter (m1=401,lck=m1+4,lcklog=mnp+4,
+     & lwrk=6*m1+16,lwrklog=6*mnp+16)
+      double precision a,b,tol,y(ldy,mnp),
+     & w(lw),abt(n),g,m,hc,fpi,pi,e1,bb,phi0,zpi,mpi,delta,ders,
+     & cu(lck),lamu(lck),cv(lck),lamv(lck),cslog(lcklog),
+     & cp(lck),lamp(lck),slog(mnp),lams(lck),cs(lck),
+     & dslog(mnp),gr(mnp),x(m1),lamslog(lcklog),wrk(lwrk),
+     & lamsdlog(lcklog),csdlog(lcklog),sfl(m1),dsfl(m1),
+     & wrklog(lwrklog),deleps,work(lwork),
+     & dlams(lck),dcs(lck),dlamp(lck),dcp(lck),sig,dsig,
+     & uuu(m1),vvv(m1),u,v,pion,beta,
+     & lam2,nu2,uzero,s0,gw,grh,mr,mw,rm,
+     & tlams(lck),dtlams(lck),tlamp(lck),dtlamp(lck),
+     & cst(lck),dcst(lck),dcpt(lck),cpt(lck),
+     & onw,onr,ona
+
+      external fcnlogf,gcondlf,jacobflf,jacobglf,jacepslf,jacgeplf
+
+      common/grid/x
+      common/range/a,b,rm
+      common/constants/hc,pi
+
+      common/masses/m,mpi,mr,mw
+      common/couplings/g,gw,grh
+
+
+      common/param/e1,bb,phi0,zpi,delta,fpi,s0,beta
+      common/parmex/lam2,nu2,uzero
+
+      common/accensione/onw,onr,ona
+
+      common/lambdas/lams,dlams,lamp,dlamp,lamu,lamv,cs,
+     & dcs,dcp,cp,cu,cv
+      common/temp/tlams,dtlams,tlamp,dtlamp,cst,dcst,dcpt,cpt
+
+
+
+     
+
+
+      np=5000
+
+      numbeg=1
+      nummix=0
+
+      tol=1.d-6
+
+      init=1
+     
+
+c      ifail=110
+
+c
+
+c         do 40 i=1,m1
+c            write(*,*)x(i),sig(x(i)),pion(x(i)),u(x(i)),
+c     &       v(x(i))
+c 40         continue
+
+      do 10 i=1,np
+         gr(i)=(dfloat(np-i)*a+dfloat(i-1)*b)/dfloat(np-1)
+         y(1,i)=sig(gr(i))
+         y(2,i)=dsig(gr(i))
+c         write(*,*)gr(i),y(1,i),y(2,i)
+c         write(*,*)gr(i),u(gr(i)),v(gr(i)),pion(gr(i))
+ 10      continue
+
+
+
+      ijac=1
+      deleps=0.d0
+      ifail=0
+c      ifail=110
+      call d02raf(n,mnp,np,numbeg,nummix,tol,init,gr,y,ldy,abt,
+     &     fcnlogf,gcondlf,ijac,jacobflf,jacobglf,deleps,jacepslf,
+     &     jacgeplf,
+     &     work,lwork,iwork,liwork,ifail)
+c     
+      if (ifail.ne.0)then
+      write(*,*)"ifailsigmalog=",ifail
+      endif
+c      do 20 j=1,np
+c      write(*,*)gr(j),y(1,j),y(2,j)
+c 20   continue
+
+
+      do 30 i=1,np        
+         slog(i)=y(1,i)
+         dslog(i)=y(2,i)
+c         write(*,*)i,slog(i)
+ 30      continue
+c
+       ifail=0
+       call e01baf(np,gr,slog,lamslog,cslog,lcklog,wrklog,
+     & lwrklog,ifail) 
+      call e01baf(np,gr,dslog,lamsdlog,csdlog,lcklog,wrklog,
+     & lwrklog,ifail) 
+       
+      ifail=1
+      do 50 i=1,m1
+      call e02bbf(np+4,lamslog,cslog,x(i),sfl(i),ifail)
+      call e02bbf(np+4,lamsdlog,csdlog,x(i),dsfl(i),ifail)
+
+ 50   continue
+      ifail=0
+
+      call e01baf(m1,x,sfl,tlams,cst,lck,wrk,lwrk,ifail)
+      call e01baf(m1,x,dsfl,dtlams,dcst,lck,wrk,lwrk,ifail)
+c      do 60 i=1,m1
+c         write(*,*)x(i),sig(x(i)),dsig(x(i))
+
+c 60      continue
+      return
+      end
+c
+c-------------------------------------------------------------------
+
+      subroutine fcnlogf(x,eps,y,f,n)
+      implicit none
+      integer m1,ifail,lck,n
+      parameter (m1=401,lck=m1+4)
+      double precision x,y(n),f(n),g,m,rho,
+     & hc,pi,e1,bb,phi0,zpi,delta,fpi,ders,
+     & pp,cp(lck),lamp(lck),lams(lck),cs(lck),
+     & uu,cu(lck),lamu(lck),vv,cv(lck),lamv(lck),
+     & pion,u,v,dersmex,derslog,dlams(lck),dcs(lck),
+     & dlamp(lck),dcp(lck),eps,cost,mpi,s0,gw,grh,
+     & uuu(m1),vvv(m1),lam2,nu2,uzero,s1,s2,beta,
+     & lamw(lck),dlamw(lck),lamr(lck),dlamr(lck),lamas(lck),lamat(lck),
+     & cw(lck),dcw(lck),cr(lck),dcr(lck),cas(lck),dcas(lck),
+     & cat(lck),dcat(lck),dlamas(lck),dlamat(lck),
+     & tlamw(lck),tlamr(lck),tlamas(lck),tlamat(lck),
+     & cwt(lck),dcwt(lck),crt(lck),dcrt(lck),cast(lck),dcast(lck),
+     & catt(lck),dcatt(lck),
+     & dtlamw(lck),dtlamr(lck),dtlamas(lck),dtlamat(lck),
+     & wf,dpion,rhof,as,at,mr,mw,onw,onr,ona
+
+      common/parmex/lam2,nu2,uzero
+      common/param/e1,bb,phi0,zpi,delta,fpi,s0,beta
+
+      common/lambdas/lams,dlams,lamp,dlamp,lamu,lamv,cs,
+     & dcs,dcp,cp,cu,cv
+      common/lambdasvm/lamw,dlamw,lamr,dlamr,lamas,dlamas,lamat,
+     & dlamat,cw,dcw,cr,dcr,cas,dcas,cat,dcat 
+
+      common/tempvm/tlamw,dtlamw,tlamr,dtlamr,tlamas,dtlamas,tlamat,
+     & dtlamat,cwt,dcwt,crt,dcrt,
+     & cast,dcast,catt,dcatt
+
+      common/couplings/g,gw,grh
+      common/masses/m,mpi,mr,mw
+      common/constants/hc,pi
+      common/accensione/onw,onr,ona     
+
+
+
+c     pot. cappello messicano
+      dersmex=lam2*y(1)*(y(1)**2+pion(x)**2-nu2)-fpi*mpi**2
+      derslog=bb*delta*phi0**4*y(1)*(1.d0/s0**2 -1.d0/(y(1)**2+
+     & pion(x)**2))+e1*(y(1)-s0)/s0**2
+
+c moltiplico per extra beta
+
+
+       rho=u(x)**2-v(x)**2
+
+
+
+cMie equazioni con il pione negativo
+       s1=(2.d0*grh*(-dpion(x)*(ona*as(x)+2.d0*ona*at(x)/3.d0)-
+     & (2.d0*pion(x)/x)*
+     & (ona*as(x)-1.d0*ona*at(x)/3.d0)))
+  
+
+
+       s2=(grh**2*(y(1)*ona*(3.d0*as(x)**2+
+     & 2.d0*at(x)**2/3.d0)+2.d0*onr*rhof(x)*
+     & pion(x)*(ona*as(x)-1.d0*ona*at(x)/3.d0)-
+     & onr*s0*mpi**2*pion(x)**2/mr**2))
+
+
+
+      f(1)=y(2)
+      f(2)=-2.d0*y(2)/x+
+     &(1.d0-eps)*dersmex+eps*derslog/beta+3*g/(4.d0*pi*beta)*rho+
+     & s1+s2
+
+      return
+      end
+
+c------------------------------------------
+c ---------------------------------------------------------------------------
+
+      subroutine gcondlf(eps,ya,yb,bc,n)
+      implicit none
+      integer n
+      double precision eps,ya(n),yb(n),bc(n)
+      double precision g,m,hc,pi,e1,bb,phi0,zpi,delta,fpi,
+     & a,b,rm,s0,beta,mpi,mr,mw
+
+      common/param/e1,bb,phi0,zpi,delta,fpi,s0,beta
+      common/range/a,b,rm
+      common/masses/m,mpi,mr,mw      
+
+
+      bc(1)=ya(2)-1.d-5
+      bc(2)=yb(2)-1.d-5
+      
+      return
+      end
+
+
+
+c -------------------------------------------------------------
+c ---------------------------------------------------
+      subroutine jacobflf(x,eps,y,f,n)
+      implicit none
+      integer n,m1,ifail,lck
+      parameter (m1=401,lck=m1+4)
+      double precision cs(lck),lams(lck),cp(lck),lamp(lck),
+     & lamu(lck),lamv(lck),cu(lck),cv(lck),
+     & dlams(lck),dcs(lck),dlamp(lck),dcp(lck) 
+      double precision x,eps,y(n),f(n,n),dersmex,derslog,dersmexdy1,
+     &     derslogdy1,pion,cost,lam2,nu2,uzero,mpi,s0,beta,ds2,
+     & mr,gw,grh,as,at,mw,onw,onr,ona
+      double precision g,m,hc,pi,e1,bb,phi0,zpi,delta,fpi,b
+
+      common/parmex/lam2,nu2,uzero
+      common/param/e1,bb,phi0,zpi,delta,fpi,s0,beta
+
+      common/lambdas/lams,dlams,lamp,dlamp,lamu,lamv,cs,
+     & dcs,dcp,cp,cu,cv
+
+      common/couplings/g,gw,grh
+      common/masses/m,mpi,mr,mw
+      common/constants/hc,pi
+      common/accensione/onw,onr,ona        
+
+
+
+      dersmex=lam2*y(1)*(y(1)**2+pion(x)**2-nu2)-fpi*mpi**2
+      derslog=bb*delta*phi0**4*y(1)*(1.d0/s0**2 -1.d0/(y(1)**2+
+     & pion(x)**2))+e1*(y(1)-s0)/s0**2
+
+
+
+      ds2=grh**2*ona*(3.d0*as(x)**2+2.d0*at(x)**2/3.d0)
+
+      dersmexdy1=lam2*(3.d0*y(1)**2+pion(x)**2-nu2)
+      derslogdy1=bb*delta*phi0**4*(1.d0/s0**2+(y(1)**2-pion(x)**2)/
+     & (y(1)**2+pion(x)**2)**2)+e1/s0**2
+
+
+
+
+      f(1,1)=0.d0
+      f(1,2)=1.d0
+      f(2,1)=(1.d0-eps)*dersmexdy1+eps*derslogdy1/beta+ds2
+      f(2,2)=-2.d0/x
+      return
+      end
+
+c -----------------------------------------------------c -----------------------------------------------------
+
+      subroutine jacobglf(eps,ya,yb,aj,bj,n)
+      implicit none
+      integer n
+      double precision eps,ya(n),yb(n),aj(n,n),bj(n,n)
+      double precision g,m,hc,pi,e1,bb,phi0,zpi,delta,fpi,
+     & a,b,rm,s0,beta,mpi,mr,mw
+
+      common/range/a,b,rm
+      common/param/e1,bb,phi0,zpi,delta,fpi,s0,beta
+      common/masses/m,mpi,mr,mw
+      
+      aj(1,1)=0.d0
+      aj(1,2)=1.d0
+      aj(2,1)=0.d0
+      aj(2,2)=0.d0
+      bj(1,1)=0.d0
+      bj(1,2)=0.d0
+      bj(2,1)=0.d0
+      bj(2,2)=1.d0
+      return
+      end
+
+c -----------------------------------------------------
+c -----------------------------------------------------
+
+      subroutine jacepslf(x,eps,y,f,n)
+      implicit none
+      integer n,m1,ifail,lck
+      parameter (m1=401,lck=m1+4)
+      double precision cs(lck),lams(lck),cp(lck),lamp(lck),
+     & lamu(lck),lamv(lck),cu(lck),cv(lck),
+     & dlams(lck),dcs(lck),dlamp(lck),dcp(lck),pion     
+      double precision x,eps,y(n),f(n),dersmex,derslog,pai
+      double precision g,m,hc,pi,e1,bb,phi0,zpi,delta,fpi,b,
+     & lam2,nu2,uzero,mpi,s0,beta,mr,mw
+
+      common/parmex/lam2,nu2,uzero        
+      common/param/e1,bb,phi0,zpi,delta,fpi,s0,beta
+      common/lambdas/lams,dlams,lamp,dlamp,lamu,lamv,cs,
+     & dcs,dcp,cp,cu,cv
+      common/masses/m,mpi,mr,mw
+    
+
+
+
+      return
+      end
+
+c -----------------------------------------------------
+c -----------------------------------------------------
+
+      subroutine jacgeplf(eps,ya,yb,bcep,n)
+      implicit none
+      integer n
+      double precision eps,ya(n),yb(n),bcep(n)
+
+      return
+      end
+
+c -----------------------------------------------------
